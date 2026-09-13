@@ -43,9 +43,11 @@
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
-  cursor: grab;
+  cursor: default;
   opacity: 0;
   transition: opacity 0.18s ease;
+  /* 与官方插件一致：交互元素显式退出系统拖拽区，避免 click 被吞 */
+  -webkit-app-region: no-drag;
 }
 
 .di-root:hover .di-toolbar,
@@ -74,6 +76,7 @@
   padding: 0 6px;
   border: none;
   border-radius: 6px;
+  -webkit-app-region: no-drag;
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
   font-size: 12px;
@@ -120,6 +123,11 @@
   backdrop-filter: blur(var(--bg-blur));
   -webkit-backdrop-filter: blur(var(--bg-blur));
   text-align: var(--align);
+  cursor: grab;
+}
+
+.di-root.is-locked .di-scroll {
+  cursor: default;
 }
 
 .di-scroll::-webkit-scrollbar {

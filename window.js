@@ -205,7 +205,7 @@ export function activateWindow(ctx) {
       const clock = ref(Date.now());
       const settings = ref(normalizeSettings(DEFAULT_SETTINGS));
       const scrollEl = ref(null);
-      const toolbarEl = ref(null);
+      const contentEl = ref(null);
       let disposeSnapshot = null;
       let disposeDrag = null;
       let clockTimer = 0;
@@ -340,12 +340,14 @@ export function activateWindow(ctx) {
       const toggleLock = () =>
         saveSettings({ ...settings.value, locked: !settings.value.locked });
 
-      // 锁定时解绑拖拽，解锁后重新绑定
+      // 注意：宿主的 drag.bind 会在 pointerdown 上调用 setPointerCapture + preventDefault，
+      // 被绑定元素的**子元素**将收不到 click。因此拖拽绑定到歌词内容区，
+      // 按钮所在的工具条是它的兄弟节点，不受影响。
       const bindDrag = () => {
         if (settings.value.locked) return;
-        if (disposeDrag || !toolbarEl.value || !ctx.window.drag?.bind) return;
+        if (disposeDrag || !contentEl.value || !ctx.window.drag?.bind) return;
         try {
-          disposeDrag = ctx.window.drag.bind(toolbarEl.value);
+          disposeDrag = ctx.window.drag.bind(contentEl.value);
         } catch (error) {
           console.warn("[desktop-lyric-styler] 绑定拖动失败", error);
         }
@@ -354,6 +356,15 @@ export function activateWindow(ctx) {
       const unbindDrag = () => {
         disposeDrag?.();
         disposeDrag = null;
+      };
+
+      // 歌词区与空状态是两个不同元素，切换时需重新绑定拖拽
+      const setScrollEl = (el) => {
+        scrollEl.value = el;
+        contentEl.value = el;
+      };
+      const setContentEl = (el) => {
+        contentEl.value = el;
       };
 
       // 当前行按片段渲染，已唱到的片段染成高亮色（从左到右覆盖）
@@ -460,6 +471,10 @@ export function activateWindow(ctx) {
           else bindDrag();
         },
       );
+      watch(contentEl, () => {
+        unbindDrag();
+        bindDrag();
+      });
       watch(
         () => settings.value.clickThrough,
         (value) =>
@@ -470,9 +485,12 @@ export function activateWindow(ctx) {
         void clock.value;
         const root = h(
           "div",
-          { class: "di-root", style: rootStyle.value },
+          {
+            class: ["di-root", settings.value.locked ? "is-locked" : ""],
+            style: rootStyle.value,
+          },
           [
-            h("div", { class: "di-toolbar", ref: toolbarEl }, [
+            h("div", { class: "di-toolbar" }, [
               iconButton(
                 settings.value.locked ? "窗口已锁定，点击解锁" : "锁定窗口位置",
                 settings.value.locked ? "lock" : "unlock",
@@ -490,7 +508,7 @@ export function activateWindow(ctx) {
             hasLyric.value
               ? h(
                   "div",
-                  { class: "di-scroll", ref: scrollEl },
+                  { class: "di-scroll", ref: setScrollEl },
                   lines.value.map((line, index) =>
                     h("div", { key: index }, [
                       h("p", { class: lineClass(index) }, renderLineText(line, index)),
@@ -500,7 +518,7 @@ export function activateWindow(ctx) {
                     ]),
                   ),
                 )
-              : h("div", { class: "di-empty" }, [
+              : h("div", { class: "di-empty", ref: setContentEl }, [
                   h(
                     "div",
                     { class: "di-empty-title" },
