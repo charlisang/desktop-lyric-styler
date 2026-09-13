@@ -1,0 +1,181 @@
+.di-root {
+  --played: #ffffff;
+  --unplayed: #8a8a8a;
+  --font-size: 22px;
+  --line-height: 1.7;
+  --align: center;
+  --bg-opacity: 0.22;
+  --bg-blur: 18px;
+  --font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--unplayed);
+  font-family: var(--font-family);
+  user-select: none;
+}
+
+.di-root *,
+.di-root *::before,
+.di-root *::after {
+  box-sizing: border-box;
+}
+
+/* 顶部工具栏：同时作为拖拽热区 */
+.di-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: grab;
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.di-root:hover .di-toolbar,
+.di-root.is-editing .di-toolbar {
+  opacity: 1;
+}
+
+.di-toolbar:active {
+  cursor: grabbing;
+}
+
+.di-toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.di-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.di-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.di-btn:active {
+  transform: scale(0.94);
+}
+
+.di-btn.is-active {
+  background: rgba(49, 207, 161, 0.85);
+  color: #06231b;
+}
+
+/* 歌词滚动区（玻璃面板） */
+.di-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  padding: 14px 18px 40px;
+  border-radius: 14px;
+  background: rgba(16, 18, 26, var(--bg-opacity));
+  backdrop-filter: blur(var(--bg-blur));
+  -webkit-backdrop-filter: blur(var(--bg-blur));
+  text-align: var(--align);
+}
+
+.di-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.di-scroll {
+  scrollbar-width: none;
+}
+
+.di-line {
+  margin: 0;
+  padding: 4px 2px;
+  color: var(--unplayed);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  font-weight: 500;
+  opacity: 0.85;
+  transition: color 0.25s ease, opacity 0.25s ease, transform 0.25s ease,
+    filter 0.25s ease;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.di-line.is-played {
+  color: var(--played);
+  opacity: 1;
+}
+
+.di-line.is-current {
+  color: var(--played);
+  opacity: 1;
+  font-weight: 800;
+  transform: scale(1.04);
+  filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.35));
+}
+
+.di-translation {
+  margin: -2px 0 6px;
+  padding: 0 2px;
+  color: var(--played);
+  font-size: calc(var(--font-size) * 0.68);
+  line-height: 1.5;
+  opacity: 0.72;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.di-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 6px;
+  color: var(--unplayed);
+  text-align: center;
+  padding: 0 16px;
+}
+
+.di-empty-title {
+  font-size: calc(var(--font-size) * 1.1);
+  font-weight: 700;
+  color: var(--played);
+  opacity: 0.95;
+}
+
+.di-empty-sub {
+  font-size: calc(var(--font-size) * 0.72);
+  opacity: 0.7;
+}
+
+.di-loading {
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .di-scroll {
+    scroll-behavior: auto;
+  }
+  .di-line {
+    transition: none;
+  }
+}

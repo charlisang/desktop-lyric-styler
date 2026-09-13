@@ -1,0 +1,38 @@
+{
+  "id": "desktop-lyric-styler",
+  "name": "桌面歌词浮窗",
+  "version": "1.0.0",
+  "description": "可自定义字体样式、字号、已播放/未播放颜色与翻译的桌面歌词浮窗。",
+  "author": "EchoMusic User",
+  "icon": "icon.svg",
+  "main": "index.js",
+  "requires": {
+    "echoMusicVersion": ">=2.2.6-beta.20"
+  },
+  "contributes": {
+    "windows": [
+      {
+        "id": "lyric",
+        "type": "floating",
+        "title": "桌面歌词",
+        "main": "window.js",
+        "style": "window.css",
+        "defaultWidth": 480,
+        "defaultHeight": 380,
+        "minWidth": 280,
+        "minHeight": 150,
+        "maxWidth": 900,
+        "maxHeight": 820,
+        "position": "bottom-center",
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": true,
+        "movable": true,
+        "allowOutsideWorkArea": true,
+        "acceptFirstMouse": true,
+        "rememberBounds": true
+      }
+    ]
+  }
+}
