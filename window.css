@@ -9,6 +9,7 @@
   --font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
     "Microsoft YaHei", sans-serif;
   box-sizing: border-box;
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -25,14 +26,24 @@
   box-sizing: border-box;
 }
 
-/* 顶部工具栏：同时作为拖拽热区 */
+/* 功能按钮：悬浮于窗口内部（玻璃面板之上），同时作为拖拽热区 */
 .di-toolbar {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(10, 12, 20, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
   cursor: grab;
-  flex: 0 0 auto;
   opacity: 0;
   transition: opacity 0.18s ease;
 }
@@ -46,22 +57,26 @@
   cursor: grabbing;
 }
 
-.di-toolbar-spacer {
-  flex: 1 1 auto;
+.di-divider {
+  width: 1px;
+  height: 15px;
+  margin: 0 2px;
+  background: rgba(255, 255, 255, 0.24);
+  flex: 0 0 auto;
 }
 
 .di-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
-  height: 26px;
-  padding: 0 7px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
   border: none;
-  border-radius: 7px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
@@ -69,7 +84,7 @@
 }
 
 .di-btn:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .di-btn:active {
@@ -81,13 +96,25 @@
   color: #06231b;
 }
 
+.di-btn.is-danger:hover {
+  background: rgba(248, 81, 73, 0.86);
+  color: #fff;
+}
+
+.di-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  flex: 0 0 auto;
+}
+
 /* 歌词滚动区（玻璃面板） */
 .di-scroll {
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
   scroll-behavior: smooth;
-  padding: 14px 18px 40px;
+  padding: 40px 18px 34px;
   border-radius: 14px;
   background: rgba(16, 18, 26, var(--bg-opacity));
   backdrop-filter: blur(var(--bg-blur));

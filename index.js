@@ -24,6 +24,13 @@ const ALIGNS = [
   { label: "居左", value: "left" },
 ];
 
+const FONT_SIZES = [12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 56, 64, 72];
+
+const FONT_SIZE_OPTIONS = FONT_SIZES.map((size) => ({
+  label: `${size} px`,
+  value: size,
+}));
+
 const clamp = (value, min, max) =>
   Math.max(min, Math.min(max, Number(value) || 0));
 
@@ -238,6 +245,21 @@ const createSettingsComponent = (ctx) =>
         }
       });
 
+      const fontSizeOptions = computed(() => {
+        const current = clamp(
+          Number(settings.value.fontSize) || DEFAULT_SETTINGS.fontSize,
+          12,
+          72,
+        );
+        if (FONT_SIZE_OPTIONS.some((item) => item.value === current)) {
+          return FONT_SIZE_OPTIONS;
+        }
+        return [
+          ...FONT_SIZE_OPTIONS,
+          { label: `${current} px（自定义）`, value: current },
+        ].sort((a, b) => a.value - b.value);
+      });
+
       const patch = (value) => {
         void saveSettings(ctx, { ...settings.value, ...value }).catch(
           (error) => {
@@ -268,6 +290,17 @@ const createSettingsComponent = (ctx) =>
           modelValue: settings.value[key],
           options,
           "onUpdate:modelValue": (value) => patch({ [key]: value }),
+        });
+
+      const fontSizeSelect = () =>
+        h(Select, {
+          modelValue: Number(settings.value.fontSize),
+          options: fontSizeOptions.value,
+          "onUpdate:modelValue": (value) =>
+            patch({
+              fontSize:
+                Number(value) || DEFAULT_SETTINGS.fontSize,
+            }),
         });
 
       const slider = (key, min, max, step, suffix = "") =>
@@ -328,7 +361,7 @@ const createSettingsComponent = (ctx) =>
                 ...fontOptions.value,
               ]),
             ),
-            field("字号", slider("fontSize", 12, 72, 1, "px")),
+            field("字号", fontSizeSelect()),
             color("playedColor", "已播放歌词颜色"),
             color("unplayedColor", "未播放歌词颜色"),
             field("对齐方式", select("align", ALIGNS)),

@@ -23,6 +23,8 @@ const DEFAULT_SETTINGS = {
 
 const ALIGNS = ["center", "left"];
 
+const FONT_SIZES = [12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 56, 64, 72];
+
 const clamp = (value, min, max) =>
   Math.max(min, Math.min(max, Number(value) || 0));
 
@@ -267,7 +269,11 @@ export function activateWindow(ctx) {
         h(
           "button",
           {
-            class: ["di-btn", options.active ? "is-active" : ""],
+            class: [
+              "di-btn",
+              options.active ? "is-active" : "",
+              options.danger ? "is-danger" : "",
+            ],
             type: "button",
             title,
             onClick: (event) => {
@@ -278,11 +284,31 @@ export function activateWindow(ctx) {
           [svgIcon(icon)],
         );
 
-      const stepFontSize = (delta) =>
-        saveSettings({
-          ...settings.value,
-          fontSize: clamp(settings.value.fontSize + delta, 12, 72),
+      // 按预设档位跳档，与设置页下拉菜单保持一致
+      const stepFontSize = (direction) => {
+        const current = clamp(
+          Number(settings.value.fontSize) || DEFAULT_SETTINGS.fontSize,
+          12,
+          72,
+        );
+        let index = 0;
+        let best = Number.POSITIVE_INFINITY;
+        FONT_SIZES.forEach((size, i) => {
+          const diff = Math.abs(size - current);
+          if (diff < best) {
+            best = diff;
+            index = i;
+          }
         });
+        const nextIndex = Math.min(
+          Math.max(index + direction, 0),
+          FONT_SIZES.length - 1,
+        );
+        return saveSettings({
+          ...settings.value,
+          fontSize: FONT_SIZES[nextIndex],
+        });
+      };
 
       const toggleTranslation = () =>
         saveSettings({
@@ -391,8 +417,8 @@ export function activateWindow(ctx) {
           { class: "di-root", style: rootStyle.value },
           [
             h("div", { class: "di-toolbar", ref: toolbarEl }, [
-              iconButton("减小字号", "minus", () => stepFontSize(-2)),
-              iconButton("增大字号", "plus", () => stepFontSize(2)),
+              iconButton("减小字号", "minus", () => stepFontSize(-1)),
+              iconButton("增大字号", "plus", () => stepFontSize(1)),
               iconButton(
                 "翻译开关",
                 "translate",
@@ -405,9 +431,12 @@ export function activateWindow(ctx) {
                 () => void togglePin().catch(() => undefined),
                 { active: settings.value.alwaysOnTop },
               ),
-              h("div", { class: "di-toolbar-spacer" }),
-              iconButton("隐藏浮窗", "close", () =>
-                ctx.window.hide().catch(() => undefined),
+              h("span", { class: "di-divider" }),
+              iconButton(
+                "隐藏浮窗",
+                "close",
+                () => ctx.window.hide().catch(() => undefined),
+                { danger: true },
               ),
             ]),
             hasLyric.value
