@@ -23,8 +23,6 @@ const DEFAULT_SETTINGS = {
 
 const ALIGNS = ["center", "left"];
 
-const FONT_SIZES = [12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 56, 64, 72];
-
 const clamp = (value, min, max) =>
   Math.max(min, Math.min(max, Number(value) || 0));
 
@@ -246,8 +244,6 @@ export function activateWindow(ctx) {
           "aria-hidden": "true",
         };
         const path = (d) => h("path", { d });
-        if (name === "minus") return h("svg", common, [path("M5 12h14")]);
-        if (name === "plus") return h("svg", common, [path("M12 5v14"), path("M5 12h14")]);
         if (name === "translate")
           return h("svg", common, [
             path("M4 6h11"),
@@ -283,32 +279,6 @@ export function activateWindow(ctx) {
           },
           [svgIcon(icon)],
         );
-
-      // 按预设档位跳档，与设置页下拉菜单保持一致
-      const stepFontSize = (direction) => {
-        const current = clamp(
-          Number(settings.value.fontSize) || DEFAULT_SETTINGS.fontSize,
-          12,
-          72,
-        );
-        let index = 0;
-        let best = Number.POSITIVE_INFINITY;
-        FONT_SIZES.forEach((size, i) => {
-          const diff = Math.abs(size - current);
-          if (diff < best) {
-            best = diff;
-            index = i;
-          }
-        });
-        const nextIndex = Math.min(
-          Math.max(index + direction, 0),
-          FONT_SIZES.length - 1,
-        );
-        return saveSettings({
-          ...settings.value,
-          fontSize: FONT_SIZES[nextIndex],
-        });
-      };
 
       const toggleTranslation = () =>
         saveSettings({
@@ -417,8 +387,6 @@ export function activateWindow(ctx) {
           { class: "di-root", style: rootStyle.value },
           [
             h("div", { class: "di-toolbar", ref: toolbarEl }, [
-              iconButton("减小字号", "minus", () => stepFontSize(-1)),
-              iconButton("增大字号", "plus", () => stepFontSize(1)),
               iconButton(
                 "翻译开关",
                 "translate",

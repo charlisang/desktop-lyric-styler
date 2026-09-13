@@ -26,12 +26,11 @@
   box-sizing: border-box;
 }
 
-/* 功能按钮：悬浮于窗口内部（玻璃面板之上），同时作为拖拽热区 */
+/* 功能按钮：悬浮于窗口内部右上（玻璃面板之上），同时作为拖拽热区 */
 .di-toolbar {
   position: absolute;
   top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 8px;
   z-index: 5;
   display: flex;
   align-items: center;
