@@ -112,12 +112,21 @@ const calculateLineIndex = (lines, seekMs) => {
   return index;
 };
 
-// 当前歌词进度（毫秒），无法推算时返回 -1
+// 当前歌词进度（毫秒），无法推算时返回 -1。
+// 注意：只在「明确是不同曲目」时才放弃推算——若用严格 !== 比较，
+// number/string 类型差异会导致误判，逐词高亮会整条失效
+// （行高亮因有 lyric.currentIndex 兜底而不受影响，所以问题不易察觉）。
 const getLyricSeekMs = (snapshot) => {
   const lyric = snapshot?.lyric;
   const playback = snapshot?.playback;
-  if (!lyric || !playback?.trackId) return -1;
-  if (lyric.trackId && lyric.trackId !== playback.trackId) return -1;
+  if (!lyric || !playback) return -1;
+  if (
+    playback.trackId != null &&
+    lyric.trackId != null &&
+    String(playback.trackId) !== String(lyric.trackId)
+  ) {
+    return -1;
+  }
   return (
     getEstimatedPlaybackMs(playback) +
     Number(lyric.timeOffset || 0) +
@@ -139,43 +148,49 @@ const getActiveLineIndex = (snapshot) => {
   return Number.isFinite(fallbackIndex) ? fallbackIndex : -1;
 };
 
-// 把一行拆成可逐段染色的片段：含空格按词分，否则按字分（中文逐字）
-const buildSegments = (text) => {
-  const value = String(text || "");
-  if (!value) return [];
-  return /\s/.test(value)
-    ? value.split(/(\s+)/).filter((part) => part.length > 0)
-    : Array.from(value);
-};
-
-// 每个片段的开始时间：优先用逐字时间，否则按时长按片段长度加权均分
-const getSegmentStarts = (text, line, nextLine) => {
-  const segments = buildSegments(text);
-  if (segments.length === 0) return [];
-  const lineStart = getLineStartMs(line);
-  const nextStart = nextLine ? getLineStartMs(nextLine) : -1;
-  const duration =
-    nextStart > lineStart
-      ? nextStart - lineStart
-      : Math.max(1200, segments.length * 260);
-
+// 逐字单元：优先使用歌词自带的 characters（含 text / startTime / endTime，毫秒，
+// 与宿主桌面歌词同源），仅在能完整还原该行文本时才采用；否则按文本兜底切分：
+// 含空格按词分、无空格按字分（中文逐字），时间按片段长度加权均分。
+const getLineSegments = (line, nextLine) => {
+  const plain = String(line?.text || "").trim();
   const characters = Array.isArray(line?.characters) ? line.characters : null;
-  if (characters && characters.length === segments.length) {
-    const starts = characters.map((item) => Number(item?.startTime));
-    if (
-      starts.length > 0 &&
-      starts.every((value) => Number.isFinite(value) && value >= 0)
-    ) {
-      return starts;
+
+  if (characters && characters.length > 0) {
+    const items = characters.map((item) => ({
+      text: String(item?.text ?? ""),
+      start: Number(item?.startTime),
+    }));
+    const joined = items
+      .map((item) => item.text)
+      .join("")
+      .replace(/\s/g, "");
+    const matchesLine =
+      joined.length > 0 && joined === plain.replace(/\s/g, "");
+    const hasTiming = items.every(
+      (item) => Number.isFinite(item.start) && item.start >= 0,
+    );
+    if (matchesLine && hasTiming) {
+      return items.filter((item) => item.text.length > 0);
     }
   }
 
-  const total = segments.reduce((sum, seg) => sum + seg.length, 0) || 1;
+  if (!plain) return [];
+  const parts = /\s/.test(plain)
+    ? plain.split(/(\s+)/).filter((part) => part.length > 0)
+    : Array.from(plain);
+  if (parts.length === 0) return [];
+
+  const lineStart = getLineStartMs(line);
+  const nextStart = nextLine ? getLineStartMs(nextLine) : -1;
+  const durationMs =
+    nextStart > lineStart ? nextStart - lineStart : Math.max(1200, parts.length * 260);
+  const total = parts.reduce((sum, part) => sum + part.length, 0) || 1;
+
   let acc = 0;
-  return segments.map((seg) => {
-    const start = lineStart + (duration * acc) / total;
-    acc += seg.length;
-    return start;
+  return parts.map((part) => {
+    const start = lineStart + (durationMs * acc) / total;
+    acc += part.length;
+    return { text: part, start };
   });
 };
 
@@ -213,6 +228,8 @@ export function activateWindow(ctx) {
       let scrollFrame = 0;
       let channel = null;
       let applyingRemote = false;
+      // 兜底行内计时锚点：播放进度不可用时，用当前行切换的墙钟时间近似
+      let lineAnchorAt = Date.now();
 
       const saveSettings = async (values, options = {}) => {
         const next = normalizeSettings(values);
@@ -256,7 +273,13 @@ export function activateWindow(ctx) {
       });
       const currentSeekMs = computed(() => {
         void clock.value;
-        return getLyricSeekMs(snapshot.value);
+        const seek = getLyricSeekMs(snapshot.value);
+        if (seek >= 0) return seek;
+        // 兜底：播放进度推算不可用时，用当前行切换的墙钟时间近似行内进度，
+        // 保证逐词染色始终能推进（行高亮本身还有 currentIndex 兜底）。
+        const line = lines.value[activeIndex.value];
+        if (!line) return -1;
+        return getLineStartMs(line) + (Date.now() - lineAnchorAt);
       });
       const hasLyric = computed(() => lines.value.length > 0);
       const fontFamily = computed(() =>
@@ -367,22 +390,24 @@ export function activateWindow(ctx) {
         contentEl.value = el;
       };
 
-      // 当前行按片段渲染，已唱到的片段染成高亮色（从左到右覆盖）
+      // 当前行按逐字单元渲染，已唱到的单元染成高亮色（从左到右覆盖）
       const renderLineText = (line, index) => {
-        const text = String(line?.text || "").trim() || "♪";
-        if (index !== activeIndex.value || !settings.value.karaoke) return text;
-        const segments = buildSegments(text);
-        if (segments.length === 0) return text;
-        const starts = getSegmentStarts(text, line, lines.value[index + 1]);
+        const plain = String(line?.text || "").trim() || "♪";
+        if (index !== activeIndex.value || !settings.value.karaoke) return plain;
+        const segments = getLineSegments(line, lines.value[index + 1]);
+        if (segments.length === 0) return plain;
         const seek = currentSeekMs.value;
-        return segments.map((seg, i) =>
+        return segments.map((segment, i) =>
           h(
             "span",
             {
               key: i,
-              class: ["di-seg", seek >= 0 && seek >= starts[i] ? "is-sung" : ""],
+              class: [
+                "di-seg",
+                seek >= 0 && seek >= segment.start ? "is-sung" : "",
+              ],
             },
-            seg,
+            segment.text,
           ),
         );
       };
@@ -458,7 +483,10 @@ export function activateWindow(ctx) {
         channel?.close();
       });
 
-      watch(activeIndex, () => scrollActiveIntoView());
+      watch(activeIndex, () => {
+        lineAnchorAt = Date.now();
+        scrollActiveIntoView();
+      });
       watch(
         () => settings.value.alwaysOnTop,
         (value) =>
