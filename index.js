@@ -6,25 +6,35 @@ const DEFAULT_SETTINGS = {
   enabled: true,
   autoOpen: true,
   alwaysOnTop: true,
+  // 布局：echo = 宿主桌面歌词风格（当前行 + 一行副歌词）；scroll = 整段歌词滚动列表
+  layoutMode: "echo",
   fontFamily: "",
-  fontSize: 22,
-  playedColor: "#ffffff",
-  unplayedColor: "#8a8a8a",
+  fontSize: 40,
+  playedColor: "#31cfa1",
+  unplayedColor: "#7a7a7a",
   showTranslation: true,
-  align: "center",
-  boldCurrent: true,
-  lineHeight: 1.7,
-  backgroundOpacity: 22,
-  backgroundBlur: 18,
+  showNextLinePreview: true,
+  align: "both",
+  boldCurrent: false,
+  lineHeight: 1.24,
+  backgroundOpacity: 0,
+  backgroundBlur: 0,
   clickThrough: false,
   locked: false,
   karaoke: true,
   karaokeColor: "#31cfa1",
 };
 
+const LAYOUT_MODES = [
+  { label: "EchoMusic 风格（当前行 + 下一行）", value: "echo" },
+  { label: "整段歌词滚动列表", value: "scroll" },
+];
+
 const ALIGNS = [
   { label: "居中", value: "center" },
   { label: "居左", value: "left" },
+  { label: "居右", value: "right" },
+  { label: "左右交错（EchoMusic 默认）", value: "both" },
 ];
 
 const FONT_SIZES = [12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 56, 64, 72];
@@ -49,6 +59,9 @@ const normalizeSettings = (value) => {
     enabled: source.enabled ?? DEFAULT_SETTINGS.enabled,
     autoOpen: source.autoOpen ?? DEFAULT_SETTINGS.autoOpen,
     alwaysOnTop: source.alwaysOnTop ?? DEFAULT_SETTINGS.alwaysOnTop,
+    layoutMode: LAYOUT_MODES.some((item) => item.value === source.layoutMode)
+      ? source.layoutMode
+      : DEFAULT_SETTINGS.layoutMode,
     fontFamily:
       typeof source.fontFamily === "string"
         ? source.fontFamily
@@ -63,6 +76,8 @@ const normalizeSettings = (value) => {
         ? source.unplayedColor
         : DEFAULT_SETTINGS.unplayedColor,
     showTranslation: source.showTranslation ?? DEFAULT_SETTINGS.showTranslation,
+    showNextLinePreview:
+      source.showNextLinePreview ?? DEFAULT_SETTINGS.showNextLinePreview,
     align,
     boldCurrent: source.boldCurrent ?? DEFAULT_SETTINGS.boldCurrent,
     lineHeight: clamp(source.lineHeight ?? DEFAULT_SETTINGS.lineHeight, 1, 3),
@@ -158,21 +173,21 @@ const SETTINGS_CSS = `
   padding: 14px;
 }
 .dls-preview {
+  display: grid;
+  gap: 6px;
   text-align: center;
   backdrop-filter: blur(14px);
 }
 .dls-preview-title {
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 1.15em;
+  font-weight: 700;
   color: var(--dls-played, #fff);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.58);
 }
 .dls-preview-unplayed {
-  font-size: 11px;
+  font-size: 0.82em;
   color: var(--dls-unplayed, #8a8a8a);
-}
-.dls-preview-translation {
-  font-size: 10px;
-  color: color-mix(in srgb, var(--dls-played, #fff) 72%, transparent);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.58);
 }
 .dls-panel h3 {
   margin: 0;
@@ -343,14 +358,17 @@ const createSettingsComponent = (ctx) =>
             style: {
               "--dls-played": settings.value.playedColor,
               "--dls-unplayed": settings.value.unplayedColor,
-              fontSize: `${Math.min(22, settings.value.fontSize)}px`,
+              fontSize: `${Math.min(28, settings.value.fontSize)}px`,
             },
           }, [
-            h("div", { class: "dls-preview-title" }, "这是已播放的歌词"),
-            settings.value.showTranslation
-              ? h("div", { class: "dls-preview-translation" }, "This is played lyric")
-              : null,
-            h("div", { class: "dls-preview-unplayed" }, "这是未播放的歌词"),
+            h("div", { class: "dls-preview-title" }, "当前歌词（已播放色）"),
+            h(
+              "div",
+              { class: "dls-preview-unplayed" },
+              settings.value.showTranslation
+                ? "译文 / 下一行（未播放色）"
+                : "下一行歌词（未播放色）",
+            ),
           ]),
           panel("启用", [
             row("启用桌面歌词浮窗", "enabled"),
@@ -367,6 +385,19 @@ const createSettingsComponent = (ctx) =>
               "开启后浮窗无法拖动，避免误操作移位；浮窗按钮也可切换。",
             ),
           ]),
+          panel("布局", [
+            field(
+              "显示方式",
+              select("layoutMode", LAYOUT_MODES),
+            ),
+            h(
+              "div",
+              { class: "dls-hint" },
+              "EchoMusic 风格：只显示当前行（大号）与一行副歌词（小号），与主程序桌面歌词一致；整段列表：居中滚动显示全部歌词。",
+            ),
+            field("对齐方式", select("align", ALIGNS)),
+            field("行距（列表布局）", slider("lineHeight", 1, 3, 0.1)),
+          ]),
           panel("文字", [
             field(
               "字体",
@@ -381,15 +412,18 @@ const createSettingsComponent = (ctx) =>
             row(
               "逐词高亮（卡拉 OK）",
               "karaoke",
-              "当前行按字词从左到右逐段染色。",
+              "当前行按字词从左到右平滑填充。",
             ),
             color("karaokeColor", "逐词高亮颜色"),
-            field("对齐方式", select("align", ALIGNS)),
             row("当前行加粗强调", "boldCurrent"),
-            field("行距", slider("lineHeight", 1, 3, 0.1)),
           ]),
           panel("翻译", [
             row("显示翻译", "showTranslation", "在歌词下方显示译文（如有）。"),
+            row(
+              "无翻译时显示下一行",
+              "showNextLinePreview",
+              "仅 EchoMusic 风格布局生效。",
+            ),
           ]),
           panel("外观", [
             field("背景不透明度", slider("backgroundOpacity", 0, 100, 1, "%")),
@@ -409,7 +443,7 @@ const createSettingsComponent = (ctx) =>
             h(
               Button,
               { variant: "ghost", size: "xs", onClick: () => patch(DEFAULT_SETTINGS) },
-              { default: () => "恢复默认" },
+              { default: () => "恢复 EchoMusic 默认样式" },
             ),
           ]),
         ]);
@@ -420,7 +454,8 @@ const registerSettings = (ctx) => {
   settingsDispose?.();
   settingsDispose = ctx.ui.settings.define({
     title: "桌面歌词浮窗",
-    description: "自定义桌面歌词的字体、字号、已播放/未播放颜色与翻译显示。",
+    description:
+      "复刻主程序桌面歌词样式的浮窗：当前行大号 + 一行副歌词，逐词高亮、颜色与翻译均可调。",
     component: createSettingsComponent(ctx),
   });
 };

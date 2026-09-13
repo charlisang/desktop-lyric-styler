@@ -7,23 +7,33 @@ const DEFAULT_SETTINGS = {
   enabled: true,
   autoOpen: true,
   alwaysOnTop: true,
+  // 布局：echo = 宿主桌面歌词风格（当前行 + 一行副歌词）；scroll = 整段歌词滚动列表
+  layoutMode: "echo",
   fontFamily: "",
-  fontSize: 22,
-  playedColor: "#ffffff",
-  unplayedColor: "#8a8a8a",
+  fontSize: 40,
+  playedColor: "#31cfa1",
+  unplayedColor: "#7a7a7a",
   showTranslation: true,
-  align: "center",
-  boldCurrent: true,
-  lineHeight: 1.7,
-  backgroundOpacity: 22,
-  backgroundBlur: 18,
+  showNextLinePreview: true,
+  align: "both",
+  boldCurrent: false,
+  lineHeight: 1.24,
+  backgroundOpacity: 0,
+  backgroundBlur: 0,
   clickThrough: false,
   locked: false,
   karaoke: true,
   karaokeColor: "#31cfa1",
 };
 
-const ALIGNS = ["center", "left"];
+const LAYOUT_MODES = ["echo", "scroll"];
+const ALIGNS = ["center", "left", "right", "both"];
+
+// 宿主 DesktopLyricView.vue 的排版常量，用于 echo 布局
+const ECHO_LINE_HEIGHT = 1.24;
+const ECHO_SECONDARY_SCALE = 0.72;
+const ECHO_NEXT_SCALE = 0.8;
+const ECHO_LINE_PADDING = 4;
 
 const clamp = (value, min, max) =>
   Math.max(min, Math.min(max, Number(value) || 0));
@@ -39,6 +49,9 @@ const normalizeSettings = (value) => {
     enabled: source.enabled ?? DEFAULT_SETTINGS.enabled,
     autoOpen: source.autoOpen ?? DEFAULT_SETTINGS.autoOpen,
     alwaysOnTop: source.alwaysOnTop ?? DEFAULT_SETTINGS.alwaysOnTop,
+    layoutMode: LAYOUT_MODES.includes(source.layoutMode)
+      ? source.layoutMode
+      : DEFAULT_SETTINGS.layoutMode,
     fontFamily:
       typeof source.fontFamily === "string"
         ? source.fontFamily
@@ -53,6 +66,8 @@ const normalizeSettings = (value) => {
         ? source.unplayedColor
         : DEFAULT_SETTINGS.unplayedColor,
     showTranslation: source.showTranslation ?? DEFAULT_SETTINGS.showTranslation,
+    showNextLinePreview:
+      source.showNextLinePreview ?? DEFAULT_SETTINGS.showNextLinePreview,
     align,
     boldCurrent: source.boldCurrent ?? DEFAULT_SETTINGS.boldCurrent,
     lineHeight: clamp(source.lineHeight ?? DEFAULT_SETTINGS.lineHeight, 1, 3),
@@ -259,8 +274,16 @@ const getFontFamily = (ctx, settings, snapshot) => {
 };
 
 export function activateWindow(ctx) {
-  const { computed, createApp, h, nextTick, onBeforeUnmount, onMounted, ref, watch } =
-    ctx.vue;
+  const {
+    computed,
+    createApp,
+    h,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+  } = ctx.vue;
 
   const App = {
     name: "DesktopLyricStylerWindow",
@@ -342,6 +365,93 @@ export function activateWindow(ctx) {
         if (!artist || artist === displayTitle) return displayTitle;
         return `${displayTitle} - ${artist}`;
       });
+
+      const isEchoLayout = computed(() => settings.value.layoutMode === "echo");
+
+      // ── echo 布局（宿主桌面歌词风格）─────────────────────────────
+      // 字号比例：当前行 1em、翻译行 0.72em、下一行 0.8em（与宿主一致）
+      const echoLineScale = (role) => {
+        if (role === "secondary") return ECHO_SECONDARY_SCALE;
+        if (role === "next") return ECHO_NEXT_SCALE;
+        return 1;
+      };
+
+      const echoLineHeight = (role) =>
+        settings.value.fontSize * echoLineScale(role) * ECHO_LINE_HEIGHT +
+        ECHO_LINE_PADDING * 2;
+
+      // 行间距：宿主为 clamp(round(fontSize * 0.1), 3, 8)
+      const echoLineGap = () =>
+        Math.min(8, Math.max(3, Math.round(settings.value.fontSize * 0.1)));
+
+      // 只显示「当前行 + 一行副歌词」：有翻译优先显示翻译，否则显示下一行
+      const echoSlots = computed(() => {
+        if (!isEchoLayout.value) return [];
+        const all = lines.value;
+        const index = activeIndex.value;
+        const current = all[index];
+        if (!current) {
+          return [
+            {
+              key: "placeholder",
+              role: "placeholder",
+              index: 0,
+              text: trackTitle.value,
+            },
+          ];
+        }
+        const slots = [{ key: `l${index}`, role: "primary", index, line: current }];
+        const translation = settings.value.showTranslation
+          ? String(current.translated || current.romanized || "").trim()
+          : "";
+        if (translation) {
+          slots.push({
+            key: `s${index}`,
+            role: "secondary",
+            index,
+            text: translation,
+          });
+          return slots;
+        }
+        if (settings.value.showNextLinePreview) {
+          const next = all[index + 1];
+          if (next) {
+            slots.push({
+              key: `l${index + 1}`,
+              role: "next",
+              index: index + 1,
+              line: next,
+            });
+          }
+        }
+        return slots;
+      });
+
+      const echoStackHeight = computed(() => {
+        const slots = echoSlots.value;
+        if (slots.length === 0) return 0;
+        const total = slots.reduce((sum, slot) => sum + echoLineHeight(slot.role), 0);
+        return total + echoLineGap() * (slots.length - 1);
+      });
+
+      // 按行块高度自上而下堆叠（宿主 getLineTop 的做法）
+      const echoLineTop = (slotIndex, slots) => {
+        let top = 0;
+        for (let i = 0; i < slotIndex; i += 1) {
+          top += echoLineHeight(slots[i].role) + echoLineGap();
+        }
+        return `${Math.round(top)}px`;
+      };
+
+      // both = 按歌词行号奇偶左右交错（宿主默认对齐方式）
+      const echoAlignClass = (slot) => {
+        if (settings.value.align !== "both") return "";
+        if (slot.role === "placeholder") return "";
+        return slot.index % 2 === 0 ? "align-left" : "align-right";
+      };
+
+      const echoFontSize = (role) =>
+        `${Math.round(settings.value.fontSize * echoLineScale(role))}px`;
 
       const translationFor = (line) =>
         settings.value.showTranslation
@@ -494,8 +604,9 @@ export function activateWindow(ctx) {
               "data-start": String(segment.start),
               "data-end": String(segment.end),
               style: {
+                // 未唱部分用未播放色、唱过部分用高亮色（宿主即 playedColor / unplayedColor）
                 backgroundImage:
-                  "linear-gradient(to right, var(--karaoke) 50%, var(--played) 50%)",
+                  "linear-gradient(to right, var(--karaoke) 50%, var(--unplayed) 50%)",
                 backgroundSize: "200% 100%",
                 backgroundRepeat: "no-repeat",
                 backgroundPositionX: "100%",
@@ -506,6 +617,12 @@ export function activateWindow(ctx) {
         );
       };
 
+      // echo 布局每行的内容：当前行做逐字填充，其余直接输出文本
+      const renderEchoContent = (slot) => {
+        if (slot.role === "primary") return renderLineText(slot.line, slot.index);
+        return String(slot.text ?? slot.line?.text ?? "").trim() || "♪";
+      };
+
       const lineClass = (index) => {
         const classes = ["di-line"];
         if (index <= activeIndex.value) classes.push("is-played");
@@ -513,6 +630,9 @@ export function activateWindow(ctx) {
           // is-active 恒加：作为定位当前行的稳定标记（不受加粗设置影响）
           classes.push("is-active");
           if (settings.value.boldCurrent) classes.push("is-current");
+        }
+        if (settings.value.align === "both") {
+          classes.push(index % 2 === 0 ? "align-left" : "align-right");
         }
         return classes;
       };
@@ -523,7 +643,8 @@ export function activateWindow(ctx) {
         "--karaoke": settings.value.karaokeColor,
         "--font-size": `${settings.value.fontSize}px`,
         "--line-height": String(settings.value.lineHeight),
-        "--align": settings.value.align,
+        "--align":
+          settings.value.align === "both" ? "center" : settings.value.align,
         "--bg-opacity": String(settings.value.backgroundOpacity / 100),
         "--bg-blur": `${settings.value.backgroundBlur}px`,
         "--font-family": fontFamily.value,
@@ -615,10 +736,88 @@ export function activateWindow(ctx) {
       );
 
       return () => {
+        const echo = isEchoLayout.value;
+        const slots = echo ? echoSlots.value : [];
+        const alignClass = `di-align-${settings.value.align}`;
+
+        const body = !hasLyric.value
+          ? h("div", { class: ["di-empty", alignClass], ref: setContentEl }, [
+              h(
+                "div",
+                { class: "di-empty-title" },
+                lyric.value?.isLoading ? "歌词加载中…" : trackTitle.value,
+              ),
+              h(
+                "div",
+                { class: "di-empty-sub" },
+                lyric.value?.isLoading
+                  ? "等待歌词数据"
+                  : playback.value?.isPlaying
+                    ? "当前歌曲暂无歌词"
+                    : "播放后这里显示桌面歌词",
+              ),
+            ])
+          : echo
+            ? // 宿主风格：当前行 + 一行副歌词，绝对定位堆叠，切行时由 CSS 过渡滑动
+              h(
+                "div",
+                { class: ["di-echo", alignClass], ref: setContentEl },
+                [
+                  h(
+                    "div",
+                    {
+                      class: "di-echo-stack",
+                      style: {
+                        height: `${Math.round(echoStackHeight.value)}px`,
+                      },
+                    },
+                    slots.map((slot, i) =>
+                      h(
+                        "div",
+                        {
+                          key: slot.key,
+                          class: [
+                            "di-echo-line",
+                            `is-${slot.role}`,
+                            echoAlignClass(slot),
+                          ],
+                          style: {
+                            top: echoLineTop(i, slots),
+                            fontSize: echoFontSize(slot.role),
+                            fontWeight:
+                              settings.value.boldCurrent &&
+                              slot.role === "primary"
+                                ? 700
+                                : 400,
+                          },
+                        },
+                        renderEchoContent(slot),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : h(
+                "div",
+                { class: ["di-scroll", alignClass], ref: setScrollEl },
+                lines.value.map((line, index) =>
+                  h("div", { key: index }, [
+                    h("p", { class: lineClass(index) }, renderLineText(line, index)),
+                    translationFor(line)
+                      ? h("p", { class: "di-translation" }, translationFor(line))
+                      : null,
+                  ]),
+                ),
+              );
+
         const root = h(
           "div",
           {
-            class: ["di-root", settings.value.locked ? "is-locked" : ""],
+            class: [
+              "di-root",
+              echo ? "is-echo" : "is-scroll",
+              settings.value.locked ? "is-locked" : "",
+            ],
             style: rootStyle.value,
           },
           [
@@ -637,35 +836,7 @@ export function activateWindow(ctx) {
                 { danger: true },
               ),
             ]),
-            hasLyric.value
-              ? h(
-                  "div",
-                  { class: "di-scroll", ref: setScrollEl },
-                  lines.value.map((line, index) =>
-                    h("div", { key: index }, [
-                      h("p", { class: lineClass(index) }, renderLineText(line, index)),
-                      translationFor(line)
-                        ? h("p", { class: "di-translation" }, translationFor(line))
-                        : null,
-                    ]),
-                  ),
-                )
-              : h("div", { class: "di-empty", ref: setContentEl }, [
-                  h(
-                    "div",
-                    { class: "di-empty-title" },
-                    lyric.value?.isLoading ? "歌词加载中…" : trackTitle.value,
-                  ),
-                  h(
-                    "div",
-                    { class: "di-empty-sub" },
-                    lyric.value?.isLoading
-                      ? "等待歌词数据"
-                      : playback.value?.isPlaying
-                        ? "当前歌曲暂无歌词"
-                        : "播放后这里显示桌面歌词",
-                  ),
-                ]),
+            body,
           ],
         );
         return root;

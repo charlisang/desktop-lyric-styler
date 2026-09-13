@@ -139,6 +139,115 @@
   scrollbar-width: none;
 }
 
+/* ── echo 布局：宿主桌面歌词风格（当前行 + 一行副歌词）────────────── */
+.di-root.is-echo {
+  /* 与宿主 .desktop-lyric 一致的窗口内边距 */
+  padding: 12px;
+}
+
+.di-echo {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.di-root.is-locked .di-echo {
+  cursor: default;
+}
+
+.di-echo-stack {
+  position: relative;
+  width: 100%;
+}
+
+.di-echo-line {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  padding: 4px;
+  line-height: 1.24;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--unplayed);
+  opacity: 0.92;
+  /* 宿主 normal 档文字阴影 */
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.58),
+    0 0 3px rgba(0, 0, 0, 0.38);
+  transition:
+    top 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    font-size 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.18s ease,
+    opacity 0.18s ease;
+  will-change: top, font-size;
+}
+
+.di-echo-line.is-primary,
+.di-echo-line.is-placeholder {
+  color: var(--played);
+  opacity: 1;
+}
+
+/* 逐字填充改用 drop-shadow：background-clip:text 下 text-shadow 会被裁掉 */
+.di-echo-line .di-char {
+  text-shadow: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.65))
+    drop-shadow(0 0 2px rgba(0, 0, 0, 0.45));
+}
+
+/* 切行：新建的行从下方淡入（关键帧只在元素创建时触发一次；
+   复用元素不重放，改由上面的 top / font-size 过渡完成"滑上去并放大"） */
+@keyframes di-echo-in {
+  from {
+    opacity: 0;
+    transform: translateY(60%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.di-echo-line {
+  animation: di-echo-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 对齐：center / left / right 整体生效；both 由 align-* 类逐行左右交错 */
+.di-align-center .di-echo-line,
+.di-align-center .di-line {
+  text-align: center;
+}
+
+.di-align-left .di-echo-line,
+.di-align-left .di-line {
+  text-align: left;
+}
+
+.di-align-right .di-echo-line,
+.di-align-right .di-line {
+  text-align: right;
+}
+
+.di-align-both .di-echo-line,
+.di-align-both .di-line {
+  text-align: center;
+}
+
+.di-align-both .di-echo-line.align-left,
+.di-align-both .di-line.align-left {
+  text-align: left;
+}
+
+.di-align-both .di-echo-line.align-right,
+.di-align-both .di-line.align-right {
+  text-align: right;
+}
+
 .di-line {
   margin: 0;
   padding: 4px 2px;
