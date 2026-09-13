@@ -1,6 +1,7 @@
 .di-root {
   --played: #ffffff;
   --unplayed: #8a8a8a;
+  --karaoke: #31cfa1;
   --font-size: 22px;
   --line-height: 1.7;
   --align: center;
@@ -155,6 +156,24 @@
   font-weight: 800;
   transform: scale(1.04);
   filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.35));
+}
+
+/* 逐词高亮：已唱到的片段从左到右染成高亮色（仅当前行渲染 .di-seg） */
+.di-seg {
+  color: var(--unplayed);
+  opacity: 0.92;
+  transition: color 0.12s linear, opacity 0.12s linear,
+    text-shadow 0.12s linear;
+}
+
+.di-seg.is-sung {
+  color: var(--karaoke);
+  opacity: 1;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--karaoke) 45%, transparent);
+}
+
+.di-line.is-current .di-seg.is-sung {
+  font-weight: 800;
 }
 
 .di-translation {

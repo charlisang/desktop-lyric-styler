@@ -1,7 +1,7 @@
 const STORAGE_KEY = "settings";
 const CHANNEL_NAME = "echo-plugin:desktop-lyric-styler:settings";
 const LYRIC_LOOKAHEAD_MS = 90;
-const CLOCK_INTERVAL_MS = 120;
+const CLOCK_INTERVAL_MS = 50;
 const SETTINGS_POLL_MS = 500;
 
 const DEFAULT_SETTINGS = {
@@ -19,6 +19,9 @@ const DEFAULT_SETTINGS = {
   backgroundOpacity: 22,
   backgroundBlur: 18,
   clickThrough: false,
+  locked: false,
+  karaoke: true,
+  karaokeColor: "#31cfa1",
 };
 
 const ALIGNS = ["center", "left"];
@@ -65,6 +68,12 @@ const normalizeSettings = (value) => {
       40,
     ),
     clickThrough: source.clickThrough ?? DEFAULT_SETTINGS.clickThrough,
+    locked: source.locked ?? DEFAULT_SETTINGS.locked,
+    karaoke: source.karaoke ?? DEFAULT_SETTINGS.karaoke,
+    karaokeColor:
+      typeof source.karaokeColor === "string"
+        ? source.karaokeColor
+        : DEFAULT_SETTINGS.karaokeColor,
   };
 };
 
@@ -103,24 +112,71 @@ const calculateLineIndex = (lines, seekMs) => {
   return index;
 };
 
-const getActiveLineIndex = (snapshot) => {
+// 当前歌词进度（毫秒），无法推算时返回 -1
+const getLyricSeekMs = (snapshot) => {
   const lyric = snapshot?.lyric;
   const playback = snapshot?.playback;
+  if (!lyric || !playback?.trackId) return -1;
+  if (lyric.trackId && lyric.trackId !== playback.trackId) return -1;
+  return (
+    getEstimatedPlaybackMs(playback) +
+    Number(lyric.timeOffset || 0) +
+    LYRIC_LOOKAHEAD_MS
+  );
+};
+
+const getActiveLineIndex = (snapshot) => {
+  const lyric = snapshot?.lyric;
   const lines = lyric?.lines ?? [];
   if (!lyric || lines.length === 0) return -1;
 
-  const canEstimate =
-    playback?.trackId && (!lyric.trackId || lyric.trackId === playback.trackId);
-  if (canEstimate) {
-    const seekMs =
-      getEstimatedPlaybackMs(playback) +
-      Number(lyric.timeOffset || 0) +
-      LYRIC_LOOKAHEAD_MS;
+  const seekMs = getLyricSeekMs(snapshot);
+  if (seekMs >= 0) {
     const index = calculateLineIndex(lines, seekMs);
     if (index >= 0) return index;
   }
   const fallbackIndex = Number(lyric.currentIndex);
   return Number.isFinite(fallbackIndex) ? fallbackIndex : -1;
+};
+
+// 把一行拆成可逐段染色的片段：含空格按词分，否则按字分（中文逐字）
+const buildSegments = (text) => {
+  const value = String(text || "");
+  if (!value) return [];
+  return /\s/.test(value)
+    ? value.split(/(\s+)/).filter((part) => part.length > 0)
+    : Array.from(value);
+};
+
+// 每个片段的开始时间：优先用逐字时间，否则按时长按片段长度加权均分
+const getSegmentStarts = (text, line, nextLine) => {
+  const segments = buildSegments(text);
+  if (segments.length === 0) return [];
+  const lineStart = getLineStartMs(line);
+  const nextStart = nextLine ? getLineStartMs(nextLine) : -1;
+  const duration =
+    nextStart > lineStart
+      ? nextStart - lineStart
+      : Math.max(1200, segments.length * 260);
+
+  const characters = Array.isArray(line?.characters) ? line.characters : null;
+  if (characters && characters.length === segments.length) {
+    const starts = characters.map((item) => Number(item?.startTime));
+    if (
+      starts.length > 0 &&
+      starts.every((value) => Number.isFinite(value) && value >= 0)
+    ) {
+      return starts;
+    }
+  }
+
+  const total = segments.reduce((sum, seg) => sum + seg.length, 0) || 1;
+  let acc = 0;
+  return segments.map((seg) => {
+    const start = lineStart + (duration * acc) / total;
+    acc += seg.length;
+    return start;
+  });
 };
 
 const getFontFamily = (ctx, settings, snapshot) => {
@@ -198,6 +254,10 @@ export function activateWindow(ctx) {
         void clock.value;
         return getActiveLineIndex(snapshot.value);
       });
+      const currentSeekMs = computed(() => {
+        void clock.value;
+        return getLyricSeekMs(snapshot.value);
+      });
       const hasLyric = computed(() => lines.value.length > 0);
       const fontFamily = computed(() =>
         getFontFamily(ctx, settings.value, snapshot.value),
@@ -244,18 +304,15 @@ export function activateWindow(ctx) {
           "aria-hidden": "true",
         };
         const path = (d) => h("path", { d });
-        if (name === "translate")
+        if (name === "lock")
           return h("svg", common, [
-            path("M4 6h11"),
-            path("M8 4l3 2-3 2"),
-            path("M13 14l4 4 4-4"),
-            path("M17 12v6"),
+            path("M8 10V7a4 4 0 0 1 8 0v3"),
+            path("M6 10h12v10H6z"),
           ]);
-        if (name === "pin")
+        if (name === "unlock")
           return h("svg", common, [
-            path("M12 16v5"),
-            path("M7 16h10"),
-            path("M9 4h6l1 6 2 2v2H6v-2l2-2 1-6Z"),
+            path("M8 10V7a4 4 0 0 1 7.6-1.7"),
+            path("M6 10h12v10H6z"),
           ]);
         if (name === "close") return h("svg", common, [path("M6 6l12 12"), path("M18 6L6 18")]);
         return h("svg", common, [path("M12 5v14"), path("M5 12h14")]);
@@ -280,16 +337,43 @@ export function activateWindow(ctx) {
           [svgIcon(icon)],
         );
 
-      const toggleTranslation = () =>
-        saveSettings({
-          ...settings.value,
-          showTranslation: !settings.value.showTranslation,
-        });
+      const toggleLock = () =>
+        saveSettings({ ...settings.value, locked: !settings.value.locked });
 
-      const togglePin = async () => {
-        const next = !settings.value.alwaysOnTop;
-        await saveSettings({ ...settings.value, alwaysOnTop: next });
-        await ctx.window.setAlwaysOnTop(next).catch(() => undefined);
+      // 锁定时解绑拖拽，解锁后重新绑定
+      const bindDrag = () => {
+        if (settings.value.locked) return;
+        if (disposeDrag || !toolbarEl.value || !ctx.window.drag?.bind) return;
+        try {
+          disposeDrag = ctx.window.drag.bind(toolbarEl.value);
+        } catch (error) {
+          console.warn("[desktop-lyric-styler] 绑定拖动失败", error);
+        }
+      };
+
+      const unbindDrag = () => {
+        disposeDrag?.();
+        disposeDrag = null;
+      };
+
+      // 当前行按片段渲染，已唱到的片段染成高亮色（从左到右覆盖）
+      const renderLineText = (line, index) => {
+        const text = String(line?.text || "").trim() || "♪";
+        if (index !== activeIndex.value || !settings.value.karaoke) return text;
+        const segments = buildSegments(text);
+        if (segments.length === 0) return text;
+        const starts = getSegmentStarts(text, line, lines.value[index + 1]);
+        const seek = currentSeekMs.value;
+        return segments.map((seg, i) =>
+          h(
+            "span",
+            {
+              key: i,
+              class: ["di-seg", seek >= 0 && seek >= starts[i] ? "is-sung" : ""],
+            },
+            seg,
+          ),
+        );
       };
 
       const lineClass = (index) => {
@@ -303,6 +387,7 @@ export function activateWindow(ctx) {
       const rootStyle = computed(() => ({
         "--played": settings.value.playedColor,
         "--unplayed": settings.value.unplayedColor,
+        "--karaoke": settings.value.karaokeColor,
         "--font-size": `${settings.value.fontSize}px`,
         "--line-height": String(settings.value.lineHeight),
         "--align": settings.value.align,
@@ -343,13 +428,7 @@ export function activateWindow(ctx) {
           };
         }
 
-        if (toolbarEl.value && ctx.window.drag?.bind) {
-          try {
-            disposeDrag = ctx.window.drag.bind(toolbarEl.value);
-          } catch (error) {
-            console.warn("[desktop-lyric-styler] 绑定拖动失败", error);
-          }
-        }
+        bindDrag();
 
         await ctx.window
           .setAlwaysOnTop(settings.value.alwaysOnTop)
@@ -375,6 +454,13 @@ export function activateWindow(ctx) {
           ctx.window.setAlwaysOnTop(value).catch(() => undefined),
       );
       watch(
+        () => settings.value.locked,
+        (locked) => {
+          if (locked) unbindDrag();
+          else bindDrag();
+        },
+      );
+      watch(
         () => settings.value.clickThrough,
         (value) =>
           ctx.window.setIgnoreMouseEvents(Boolean(value)).catch(() => undefined),
@@ -388,16 +474,10 @@ export function activateWindow(ctx) {
           [
             h("div", { class: "di-toolbar", ref: toolbarEl }, [
               iconButton(
-                "翻译开关",
-                "translate",
-                toggleTranslation,
-                { active: settings.value.showTranslation },
-              ),
-              iconButton(
-                "窗口置顶",
-                "pin",
-                () => void togglePin().catch(() => undefined),
-                { active: settings.value.alwaysOnTop },
+                settings.value.locked ? "窗口已锁定，点击解锁" : "锁定窗口位置",
+                settings.value.locked ? "lock" : "unlock",
+                () => void toggleLock().catch(() => undefined),
+                { active: settings.value.locked },
               ),
               h("span", { class: "di-divider" }),
               iconButton(
@@ -413,11 +493,7 @@ export function activateWindow(ctx) {
                   { class: "di-scroll", ref: scrollEl },
                   lines.value.map((line, index) =>
                     h("div", { key: index }, [
-                      h(
-                        "p",
-                        { class: lineClass(index) },
-                        String(line.text || "").trim() || "♪",
-                      ),
+                      h("p", { class: lineClass(index) }, renderLineText(line, index)),
                       translationFor(line)
                         ? h("p", { class: "di-translation" }, translationFor(line))
                         : null,

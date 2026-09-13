@@ -17,6 +17,9 @@ const DEFAULT_SETTINGS = {
   backgroundOpacity: 22,
   backgroundBlur: 18,
   clickThrough: false,
+  locked: false,
+  karaoke: true,
+  karaokeColor: "#31cfa1",
 };
 
 const ALIGNS = [
@@ -74,6 +77,12 @@ const normalizeSettings = (value) => {
       40,
     ),
     clickThrough: source.clickThrough ?? DEFAULT_SETTINGS.clickThrough,
+    locked: source.locked ?? DEFAULT_SETTINGS.locked,
+    karaoke: source.karaoke ?? DEFAULT_SETTINGS.karaoke,
+    karaokeColor:
+      typeof source.karaokeColor === "string"
+        ? source.karaokeColor
+        : DEFAULT_SETTINGS.karaokeColor,
   };
 };
 
@@ -352,6 +361,11 @@ const createSettingsComponent = (ctx) =>
               "clickThrough",
               "开启后浮窗不接收鼠标，适合纯展示；此时无法拖动。",
             ),
+            row(
+              "锁定窗口位置",
+              "locked",
+              "开启后浮窗无法拖动，避免误操作移位；浮窗按钮也可切换。",
+            ),
           ]),
           panel("文字", [
             field(
@@ -364,6 +378,12 @@ const createSettingsComponent = (ctx) =>
             field("字号", fontSizeSelect()),
             color("playedColor", "已播放歌词颜色"),
             color("unplayedColor", "未播放歌词颜色"),
+            row(
+              "逐词高亮（卡拉 OK）",
+              "karaoke",
+              "当前行按字词从左到右逐段染色。",
+            ),
+            color("karaokeColor", "逐词高亮颜色"),
             field("对齐方式", select("align", ALIGNS)),
             row("当前行加粗强调", "boldCurrent"),
             field("行距", slider("lineHeight", 1, 3, 0.1)),
