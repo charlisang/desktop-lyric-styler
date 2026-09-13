@@ -166,22 +166,19 @@
   filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.35));
 }
 
-/* 逐词高亮：已唱到的片段从左到右染成高亮色（仅当前行渲染 .di-seg） */
-.di-seg {
-  color: var(--unplayed);
-  opacity: 0.92;
-  transition: color 0.12s linear, opacity 0.12s linear,
-    text-shadow 0.12s linear;
-}
-
-.di-seg.is-sung {
-  color: var(--karaoke);
-  opacity: 1;
-  text-shadow: 0 0 10px color-mix(in srgb, var(--karaoke) 45%, transparent);
-}
-
-.di-line.is-current .di-seg.is-sung {
-  font-weight: 800;
+/* 逐词高亮：当前行拆成逐字单元，用 200% 宽的「高亮色 / 已播放色」渐变 +
+   background-clip: text，由 background-position-x 从 100%（全未唱）平滑走到
+   0%（全唱过），形成从左到右的渐进覆盖（宿主桌面歌词同款）。 */
+.di-char {
+  display: inline-block;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+  background-position-x: 100%;
+  will-change: background-position-x;
 }
 
 .di-translation {

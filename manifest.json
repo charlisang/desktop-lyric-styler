@@ -1,7 +1,7 @@
 {
   "id": "desktop-lyric-styler",
   "name": "桌面歌词浮窗",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "可自定义字体样式、字号、已播放/未播放颜色、逐词高亮与翻译的桌面歌词浮窗。",
   "author": "EchoMusic User",
   "icon": "icon.svg",
